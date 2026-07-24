@@ -1,0 +1,24 @@
+version: "3.9"
+
+services:
+  bmtc-chatbot:
+    build: .
+    image: bmtc-rag-chatbot:latest
+    container_name: bmtc-rag-chatbot
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    volumes:
+      # Persist the knowledge base across container restarts/rebuilds.
+      # Remove these if you'd rather bake the index into the image at build time.
+      - ./data:/app/data
+      - ./embeddings:/app/embeddings
+      - ./logs:/app/logs
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

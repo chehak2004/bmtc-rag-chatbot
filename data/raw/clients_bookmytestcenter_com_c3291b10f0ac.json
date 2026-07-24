@@ -1,0 +1,6 @@
+{
+  "url": "https://clients.bookmytestcenter.com/",
+  "title": "BMTC Client Portal - Overview",
+  "text": "The Client Portal (clients.bookmytestcenter.com) is designed for organizations and institutions that need to administer exams to their own candidates through the BMTC network. How do I register as a client organization? Visit the Client Portal and click Register Organization. Provide your organization name, business registration details, and the type of exams you plan to administer. Your account will be activated after BMTC's onboarding team verifies the submitted details. How do I bulk-upload candidates? Once logged in, go to Candidate Management, click Bulk Upload, and use the provided CSV template to add multiple candidates at once. How do I generate exam reports? The Reports section of the Client Portal allows you to download candidate performance, attendance, and booking reports in CSV or PDF format. How do I set up custom exam schedules for my organization? Use the Exam Scheduling tool in the Client Portal to define exam windows, assign eligible test centers, and set candidate eligibility rules. Who approves client organization registrations? BMTC's client onboarding team reviews and approves new client organization sign-ups, typically within 2-3 business days.",
+  "source_domain": "clients.bookmytestcenter.com"
+}

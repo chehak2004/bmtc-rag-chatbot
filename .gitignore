@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+.env
+venv/
+.venv/
+logs/*.log
+.DS_Store
+
+# NOTE: data/raw, data/processed, and embeddings/faiss_index are intentionally
+# NOT ignored. Free-tier hosting (e.g. Render) has no persistent disk, so the
+# pre-built knowledge base must be committed to git and shipped with the image.
+# If you deploy somewhere with a persistent volume instead, you can re-add
+# those paths here and generate the index at deploy time via a startup job.

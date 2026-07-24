@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>BMTC Assistant | BookMyTestCenter Support</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div class="page">
+
+  <!-- ============ Left rail: brand / context panel ============ -->
+  <aside class="brandRail">
+    <div class="brandMark">
+      <div class="brandMark__badge">BMTC</div>
+      <div class="brandMark__name">BookMyTestCenter<br><span>Support Assistant</span></div>
+    </div>
+
+    <p class="brandRail__desc">
+      Ask about candidate registration, the Center Portal, or the Client Portal.
+      Answers are grounded in official BMTC documentation only.
+    </p>
+
+    <div class="portalList">
+      <div class="portalList__title">Knowledge sources</div>
+      <div class="portalChip"><span class="portalChip__dot dot--main"></span>Main Website</div>
+      <div class="portalChip"><span class="portalChip__dot dot--center"></span>Center Portal</div>
+      <div class="portalChip"><span class="portalChip__dot dot--client"></span>Client Portal</div>
+    </div>
+
+    <div class="quickAsk">
+      <div class="quickAsk__title">Quick asks</div>
+      <button class="quickAsk__btn" data-q="How do I register as a test center?">Register a test center</button>
+      <button class="quickAsk__btn" data-q="How do I book an exam slot as a candidate?">Book an exam slot</button>
+      <button class="quickAsk__btn" data-q="How do I register a client organization?">Register an organization</button>
+      <button class="quickAsk__btn" data-q="मुझे सेंटर कैसे रजिस्टर करना है?">हिंदी में पूछें</button>
+    </div>
+
+    <div class="langToggle">
+      <span class="langToggle__label">Voice reply</span>
+      <label class="switch">
+        <input type="checkbox" id="ttsToggle">
+        <span class="switch__track"><span class="switch__thumb"></span></span>
+      </label>
+    </div>
+  </aside>
+
+  <!-- ============ Right: the ticket-style chat widget ============ -->
+  <main class="ticketWrap">
+    <section class="ticket" id="ticket">
+
+      <!-- Ticket header, styled like an admit-card stub -->
+      <header class="ticket__header">
+        <div class="ticket__headerLeft">
+          <div class="statusDot" id="statusDot"></div>
+          <div>
+            <div class="ticket__title">BMTC Assistant</div>
+            <div class="ticket__subtitle" id="statusText">Connecting to knowledge base…</div>
+          </div>
+        </div>
+        <div class="ticket__ref">
+          REF <span id="sessionRef">--------</span>
+        </div>
+      </header>
+
+      <!-- Perforated tear line, the signature element -->
+      <div class="perforation" aria-hidden="true"></div>
+
+      <!-- Chat log -->
+      <div class="chatLog" id="chatLog">
+        <div class="msg msg--bot">
+          <div class="msg__bubble">
+            Namaste! I'm the BMTC Assistant. I can help with candidate registration,
+            the Center Portal, the Client Portal, bookings, and general FAQs.
+            <br><br>आप हिंदी में भी पूछ सकते हैं।
+          </div>
+          <div class="msg__meta">BMTC Assistant · knowledge base</div>
+        </div>
+      </div>
+
+      <!-- Typing indicator -->
+      <div class="typing" id="typingIndicator" hidden>
+        <span></span><span></span><span></span>
+      </div>
+
+      <!-- Perforated tear line above input -->
+      <div class="perforation" aria-hidden="true"></div>
+
+      <!-- Composer -->
+      <form class="composer" id="composerForm" autocomplete="off">
+        <button type="button" class="composer__mic" id="micBtn" title="Voice input" aria-label="Voice input">
+          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Z" stroke="currentColor" stroke-width="1.8"/>
+            <path d="M19 11a7 7 0 0 1-14 0M12 18v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <input
+          type="text"
+          id="messageInput"
+          class="composer__input"
+          placeholder="Type your question… e.g. How do I reschedule my exam?"
+          maxlength="500"
+        />
+        <button type="submit" class="composer__send" id="sendBtn" aria-label="Send message">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M3.4 20.6 21 12 3.4 3.4l3.2 7.1L15 12l-8.4 1.5-3.2 7.1Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </form>
+
+      <div class="ticket__footer">
+        Answers are generated from official BMTC content · Not affiliated with legal advice
+      </div>
+    </section>
+  </main>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
