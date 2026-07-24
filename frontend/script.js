@@ -253,13 +253,61 @@ if (SpeechRecognition) {
 // ---------------------------------------------------------------------------
 // Text-to-speech
 // ---------------------------------------------------------------------------
+let cachedVoices = [];
+let hindiVoiceWarningShown = false;
+
+function loadVoices() {
+  if ("speechSynthesis" in window) {
+    cachedVoices = window.speechSynthesis.getVoices();
+  }
+}
+// Voices often load asynchronously — populate now and again when ready.
+loadVoices();
+if ("speechSynthesis" in window) {
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+}
+
+function findVoiceForLang(langPrefix) {
+  return cachedVoices.find((v) => v.lang.toLowerCase().startsWith(langPrefix)) || null;
+}
+
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
   window.speechSynthesis.cancel(); // stop any ongoing speech
-  const utterance = new SpeechSynthesisUtterance(text);
-  // crude Hindi detection to pick a more suitable voice/lang
+
   const isHindi = /[\u0900-\u097F]/.test(text);
-  utterance.lang = isHindi ? "hi-IN" : "en-IN";
+  const utterance = new SpeechSynthesisUtterance(text);
+
+  if (isHindi) {
+    const hindiVoice = findVoiceForLang("hi");
+    if (hindiVoice) {
+      utterance.voice = hindiVoice;
+      utterance.lang = hindiVoice.lang;
+    } else {
+      // No Hindi voice installed on this system/browser — setting the lang
+      // tag alone won't make it speak Hindi; most browsers silently
+      // substitute a default (usually English) voice instead. Let the user
+      // know once, rather than failing silently and looking broken.
+      utterance.lang = "hi-IN";
+      if (!hindiVoiceWarningShown) {
+        hindiVoiceWarningShown = true;
+        appendBotMessage({
+          answer:
+            "Note: your browser/OS doesn't have a Hindi voice installed, so voice " +
+            "reply may sound off or default to English for Hindi answers. On Windows, " +
+            "you can add one via Settings → Time & Language → Speech → Add a voice → Hindi.",
+          isError: false,
+          sources: [],
+          confidence: null,
+        });
+      }
+    }
+  } else {
+    utterance.lang = "en-IN";
+    const enVoice = findVoiceForLang("en-in") || findVoiceForLang("en");
+    if (enVoice) utterance.voice = enVoice;
+  }
+
   utterance.rate = 1.0;
   window.speechSynthesis.speak(utterance);
 }
