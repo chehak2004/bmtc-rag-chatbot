@@ -164,18 +164,23 @@ def save_raw_pages(pages: list, domain_label: str):
 def run_scraper(use_seed_fallback: bool = True):
     """Entry point: crawl every seed URL configured in .env and persist raw pages.
 
-    If a domain returns zero pages (e.g. network blocked, site unreachable,
-    robots restrictions), and use_seed_fallback is True, we fall back to the
-    curated seed content in seed_content.py for that domain so the pipeline
-    still produces a usable knowledge base.
+    IMPORTANT: many real portal features live behind a login wall or are
+    rendered client-side by JavaScript, which a simple requests+BeautifulSoup
+    crawler cannot see. To avoid the LLM hallucinating plausible-sounding but
+    incorrect capabilities when scraped content is thin (e.g. just a privacy
+    policy or a login-gated placeholder page), curated manual content from
+    `ingestion/seed_content.py` is ALWAYS merged in alongside whatever the
+    scraper finds — not only used as a last-resort fallback when scraping
+    fails outright. Keep that file accurate and up to date; it is treated as
+    ground truth by the retriever/LLM.
     """
     all_pages = []
 
-    seed_by_domain = {}
+    manual_by_domain = {}
     if use_seed_fallback:
         from ingestion.seed_content import get_seed_pages
         for p in get_seed_pages():
-            seed_by_domain.setdefault(p["source_domain"], []).append(p)
+            manual_by_domain.setdefault(p["source_domain"], []).append(p)
 
     for seed in settings.BMTC_URLS:
         domain_label = urlparse(seed).netloc.replace(".", "_")
@@ -189,10 +194,12 @@ def run_scraper(use_seed_fallback: bool = True):
         if not pages:
             logger.warning(f"No pages scraped for {seed}. Site may block bots or be unreachable "
                             f"from this environment.")
-            if use_seed_fallback and domain_key in seed_by_domain:
-                logger.info(f"Using curated seed content for {domain_key} "
-                            f"({len(seed_by_domain[domain_key])} docs).")
-                pages = seed_by_domain[domain_key]
+
+        manual_pages = manual_by_domain.get(domain_key, [])
+        if manual_pages:
+            logger.info(f"Merging {len(manual_pages)} curated manual doc(s) for {domain_key} "
+                        f"alongside {len(pages)} scraped page(s).")
+            pages = pages + manual_pages
 
         save_raw_pages(pages, domain_label)
         all_pages.extend(pages)
@@ -205,6 +212,6 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser(description="BMTC website scraper")
     parser.add_argument("--no-seed-fallback", action="store_true",
-                         help="Disable falling back to curated seed content if live scraping fails")
+                         help="Disable merging curated manual content alongside scraped pages")
     args = parser.parse_args()
     run_scraper(use_seed_fallback=not args.no_seed_fallback)

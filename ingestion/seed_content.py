@@ -1,116 +1,153 @@
 """
 seed_content.py
 ---------------
-Fallback / bootstrap knowledge base content for BMTC (BookMyTestCenter).
+Curated, VERIFIED knowledge base content for BMTC (BookMyTestCenter).
 
-Why this exists:
-Live web scraping depends on network access to bookmytestcenter.com and its
-subdomains, which may be blocked or rate-limited in some deployment
-environments (e.g. sandboxed CI, restricted egress). To guarantee the RAG
-pipeline always has *something* to index and the chatbot is demoable out of
-the box, we ship a small set of hand-written, clearly-labeled seed documents
-covering the topics the assistant is expected to answer (registration, portal
-usage, FAQs). These are used only if `scraper.py` returns zero pages for a
-domain, or if `python ingestion/scraper.py --seed-only` is run explicitly.
+Provenance: this content was extracted directly from the live public pages
+at bookmytestcenter.com, center.bookmytestcenter.com, and
+clients.bookmytestcenter.com (fetched 2026-07-24), including registration
+form flows that a simple HTML scraper often can't reconstruct because they're
+rendered step-by-step by client-side JavaScript. It is NOT guesswork or
+plausible-sounding filler — every fact below was read directly off the real
+site. If the real site changes, this file will go stale and should be
+re-verified and updated.
 
-IMPORTANT: Replace/expand this content with real scraped or officially
-provided text before production launch. Treat this as placeholder scaffolding,
-not verified BMTC policy.
+This content is always merged in alongside whatever scraper.py finds live
+(see scraper.py's run_scraper()), specifically to fill gaps where real
+product/registration-flow content is rendered client-side or otherwise
+missed by the basic crawler, while still keeping the main FAQ/marketing
+content that the live scrape does successfully capture.
 """
 
 SEED_PAGES = [
     {
         "url": "https://bookmytestcenter.com/",
-        "title": "BookMyTestCenter - Home",
+        "title": "BookMyTestCenter - Company Overview",
         "text": (
-            "BookMyTestCenter (BMTC) is an online platform that connects candidates who need to take "
-            "certification or licensing exams with certified test centers. Through the BMTC website, "
-            "users can search for available test centers, compare schedules, book an exam slot, and "
-            "manage their bookings online. BMTC serves three types of users: candidates who book exams, "
-            "test center administrators who manage center availability, and client organizations that "
-            "administer exams to their own candidates. Support is available through the Help Center and "
-            "the contact form on the main website."
+            "BookMyTestCenter (BMTC) is a product of Testpan India Pvt Ltd, a provider of "
+            "examination delivery and infrastructure services in the public and private sectors. "
+            "Testpan India was founded in early 2016 and is recognized as a Startup Company by the "
+            "Department for Promotion of Industry and Internal Trade (DPIIT). "
+            "BMTC is described as India's first one-stop digital solution for examination center "
+            "bookings and infrastructure support services. It streamlines the process of finding, "
+            "connecting with, and booking test centers for assessment companies and examination "
+            "centers through an automated booking system. "
+            "The platform serves three types of users, each with their own portal: candidates and "
+            "test centers use the Center Portal (center.bookmytestcenter.com) to register and manage "
+            "a test center; assessment companies and other client organizations use the Client Portal "
+            "(clients.bookmytestcenter.com) to register their organization; a separate Manpower portal "
+            "exists at manpowerx.co.in for manpower vendor registration and login. "
+            "BMTC's booking features include simplified search of test centers based on location, "
+            "capacity, and specialties; secure communication between assessment companies and test "
+            "centers; effortless booking that eliminates manual processes and paperwork; and "
+            "streamlined management of examination delivery, scheduling, communication, and reporting. "
+            "The mobile app additionally offers center management (add/remove/edit center details), "
+            "calendar access to check center availability, real-time notifications for booking "
+            "confirmations, and a live news feed of assessment industry updates. "
+            "BMTC can be contacted at info@testpanindia.com or info@bookmytestcenter.com, and its "
+            "corporate office is located in Nangal Raya, New Delhi, India."
         ),
         "source_domain": "bookmytestcenter.com",
     },
     {
-        "url": "https://bookmytestcenter.com/faq",
-        "title": "BookMyTestCenter - Frequently Asked Questions",
+        "url": "https://bookmytestcenter.com/#FAQsection",
+        "title": "BookMyTestCenter - Frequently Asked Questions (verified from live site)",
         "text": (
-            "How do I create an account on BookMyTestCenter? Click Sign Up on the homepage, enter your "
-            "name, email address, and phone number, then verify your email using the OTP sent to your inbox. "
-            "How do I book a test slot? After logging in, search for your exam by name or category, choose a "
-            "test center from the list of available centers, select an open date and time slot, and confirm "
-            "the booking. You will receive a confirmation email with your booking reference number. "
-            "Can I reschedule or cancel a booking? Yes, go to My Bookings, select the booking you want to "
-            "change, and choose Reschedule or Cancel. Rescheduling is subject to the test center's rescheduling "
-            "policy and may be allowed only up to a certain number of hours before the exam. "
-            "What payment methods are supported? BMTC supports credit cards, debit cards, UPI, and net banking "
-            "for exam fee payments. "
-            "What if I forget my password? Click Forgot Password on the login page and follow the instructions "
-            "sent to your registered email to reset it. "
-            "Who do I contact for support? Use the Contact Us page on bookmytestcenter.com or email the support "
-            "team listed there."
+            "How does a test center receive bookings? Assessment company clients send their test "
+            "requirements to BMTC, and based on the general and technical requirements of the exam, "
+            "BMTC routes those requests to matching test centers. The test center then confirms "
+            "availability and requirements, and BMTC completes the booking. "
+            "How much time does it take to get started with the web portal? Getting started usually "
+            "takes 1 to 3 working days after documentation is completed. "
+            "Who do I get in touch with if I get stuck or if there is an issue? Every registered user "
+            "is assigned a support manager who can be contacted by phone or email. "
+            "I am a company — how do I actually send test requirements to BMTC? Test requirements can "
+            "be sent through the company (Client) portal, or by directly contacting BMTC's sales or "
+            "support team. "
+            "Is there a common portal for Assessment Companies and Test Centers? Yes, BMTC offers a "
+            "unified platform architecture that connects both assessment companies and test centers, "
+            "though assessment companies and test centers use separate portals (Client Portal and "
+            "Center Portal respectively) to manage their own accounts."
         ),
         "source_domain": "bookmytestcenter.com",
     },
     {
         "url": "https://center.bookmytestcenter.com/",
-        "title": "BMTC Center Portal - Overview",
+        "title": "BMTC Center Portal - Verified Registration Flow (test centers)",
         "text": (
-            "The Center Portal (center.bookmytestcenter.com) is where test center administrators manage their "
-            "test center's presence on BookMyTestCenter. How do I register my test center? Visit the Center "
-            "Portal, click Register as a Test Center, and fill in your center's name, address, contact details, "
-            "available exam categories, and capacity. After submission, the BMTC verification team reviews the "
-            "application, which typically takes 2-3 business days, and you will receive an approval email once "
-            "your center is verified. "
-            "How do I manage seat availability? Log in to the Center Portal, go to the Availability Calendar, "
-            "and set open slots, block dates, or update seat capacity for each exam type. "
-            "How do I view bookings made at my center? The Bookings tab in the Center Portal lists all upcoming "
-            "and past candidate bookings, along with candidate details and payment status. "
-            "How do I update my center profile or documents? Go to Center Settings to update contact information, "
-            "upload updated compliance documents, or change operating hours. "
-            "Can multiple staff members access the Center Portal? Yes, the primary administrator can invite "
-            "additional staff accounts with restricted permissions from the Team Management section."
+            "The Center Portal (center.bookmytestcenter.com) is where a test center creates an "
+            "account and builds its center profile to receive exam bookings. The real registration "
+            "flow, as implemented on the live site, is: "
+            "Step 1 - Sign up: provide your name, phone number, and agree to the Privacy Policy and "
+            "Terms & Conditions. "
+            "Step 2 - Verify your phone number using a 6-digit OTP sent by SMS. "
+            "Step 3 - Set up a 4-digit M-Pin, which is then used to log in going forward (instead of "
+            "a traditional password). "
+            "Step 4 - Complete the Center Profile, which has four sections: "
+            "(1) Center details - center name, description, center type (Online, Offline, or Both), "
+            "postal address, latitude/longitude, uploaded photos (center logo, entrance, lab photos, "
+            "main gate, server room, observer/conference room, UPS and generator, plus an optional "
+            "walkthrough video), country/state/city, center category (School, University, ITI Diploma, "
+            "ITI College, Degree College, Private Institute, Business School, Private Test Center, "
+            "Engineering College, or Government Institution), nearby landmarks, wheelchair/lift "
+            "accessibility, and distance from the nearest railway station, bus station, metro station, "
+            "and airport. "
+            "(2) Admin details - the center's point of contact, center superintendent details, IT "
+            "manager details, and an emergency contact number. "
+            "(3) Infrastructure details - number of labs and systems, network setup (single network "
+            "or multiple, number of networks), whether each lab has partitions, air conditioning, a "
+            "network printer, a projector, and a sound system, number of fire extinguishers per lab, "
+            "free baggage storage space, drinking water availability, primary and secondary ISP "
+            "details (provider, connection type such as Broadband/Lease line/Fibre Optics/Air Fibre, "
+            "and speed), and generator/UPS backup capacity and duration. "
+            "(4) Bank details - beneficiary name, bank name, account number, IFSC code, PAN number, "
+            "GST number (if applicable) with GST state code, UIDAI number, and MSME number (if "
+            "applicable). "
+            "Before completing registration, the center must have these documents ready: a canceled "
+            "cheque, GST certificate, Udyam certificate, PAN card, and (if available) a UIDAI number. "
+            "Additional documents that can be uploaded include a signed agreement, MOU, and NDA. "
+            "Registration cannot be completed without the required documents. "
+            "To reset a forgotten M-Pin, use the 'Reset/Forgot MPIN' link on the Center Portal login "
+            "page."
         ),
         "source_domain": "center.bookmytestcenter.com",
     },
     {
         "url": "https://clients.bookmytestcenter.com/",
-        "title": "BMTC Client Portal - Overview",
+        "title": "BMTC Client Portal - Verified Registration Flow (Assessment Companies)",
         "text": (
-            "The Client Portal (clients.bookmytestcenter.com) is designed for organizations and institutions "
-            "that need to administer exams to their own candidates through the BMTC network. "
-            "How do I register as a client organization? Visit the Client Portal and click Register Organization. "
-            "Provide your organization name, business registration details, and the type of exams you plan to "
-            "administer. Your account will be activated after BMTC's onboarding team verifies the submitted "
-            "details. "
-            "How do I bulk-upload candidates? Once logged in, go to Candidate Management, click Bulk Upload, "
-            "and use the provided CSV template to add multiple candidates at once. "
-            "How do I generate exam reports? The Reports section of the Client Portal allows you to download "
-            "candidate performance, attendance, and booking reports in CSV or PDF format. "
-            "How do I set up custom exam schedules for my organization? Use the Exam Scheduling tool in the "
-            "Client Portal to define exam windows, assign eligible test centers, and set candidate eligibility "
-            "rules. "
-            "Who approves client organization registrations? BMTC's client onboarding team reviews and approves "
-            "new client organization sign-ups, typically within 2-3 business days."
+            "The Client Portal (clients.bookmytestcenter.com) is where an assessment company or "
+            "client organization registers its account. On the live site this portal is labeled "
+            "'Assessment Company'. The real registration flow, as implemented on the live site, is: "
+            "Step 1 - Provide your full name, email, and phone number, and agree to the Privacy "
+            "Policy and Terms & Conditions. "
+            "Step 2 - Verify your phone number using a 6-digit OTP. "
+            "Step 3 - Choose a 4-digit M-Pin for future logins. "
+            "Step 4 - Enter company details across three sub-steps: "
+            "(1) Company details - company name, company type (LLP, Private Limited, or Sole "
+            "Proprietorship), company website, country/state/city/pincode, company address, and an "
+            "uploaded company logo. "
+            "(2) Point of Contact details - name of the coordinator, email, mobile number, an "
+            "alternate mobile number, and a landline number. "
+            "(3) Bank details and documents - bank name, account number, IFSC code, beneficiary name, "
+            "PAN number, GST number, and uploaded documents including a canceled cheque, a signed "
+            "agreement (with start and end dates), an NDA, an MOU, a GST certificate, a PAN document, "
+            "and a Udyam certificate with Udyam Aadhar number. "
+            "Step 5 - Once submitted, the account is activated ('Welcome to BookMyTestCenter, you are "
+            "good to go') and the client is taken to their dashboard. "
+            "After registration, per BMTC's published FAQ, assessment companies send their exam/test "
+            "requirements to BMTC through this Client Portal or by contacting BMTC's sales/support "
+            "team directly; BMTC then routes matching requests to appropriate test centers for "
+            "confirmation and booking. "
+            "To reset a forgotten M-Pin, use the 'Reset/Forgot MPin' link on the Client Portal login "
+            "page. "
+            "Note: as of the last verification of this content, the live Client Portal registration "
+            "flow does not include self-service bulk candidate upload, CSV/PDF report generation, or "
+            "custom exam-scheduling tools as part of the visible public registration flow — if the "
+            "authenticated dashboard offers these, they are not reflected in this content and should "
+            "not be assumed."
         ),
         "source_domain": "clients.bookmytestcenter.com",
-    },
-    {
-        "url": "https://bookmytestcenter.com/registration-guide",
-        "title": "BookMyTestCenter - Registration Guide (Candidates)",
-        "text": (
-            "To register as a candidate on BookMyTestCenter: 1) Go to bookmytestcenter.com and click Sign Up. "
-            "2) Enter your full name, email address, mobile number, and create a password. 3) Verify your email "
-            "using the one-time password (OTP) sent to your inbox. 4) Complete your profile with your date of "
-            "birth and government ID details, which may be required for exam eligibility verification. 5) Once "
-            "your profile is complete, you can search for exams, select a test center, and book a slot. "
-            "If you are registering a test center instead of a candidate account, use the Center Portal at "
-            "center.bookmytestcenter.com. If you are registering a client organization, use the Client Portal "
-            "at clients.bookmytestcenter.com."
-        ),
-        "source_domain": "bookmytestcenter.com",
     },
 ]
 

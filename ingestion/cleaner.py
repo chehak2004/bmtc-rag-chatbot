@@ -24,6 +24,24 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 from config import settings
 from logger import logger
 
+# URL substrings that mark a page as legal/boilerplate rather than product
+# content. These pages get scraped (useful to have on file) but are excluded
+# from the chunks that feed the retriever/LLM, since they carry no
+# information about what the product actually does and can cause the model
+# to answer feature questions using irrelevant "evidence".
+BOILERPLATE_URL_PATTERNS = [
+    "privacy-policy",
+    "terms-condition",
+    "terms-of-service",
+    "cookie-policy",
+    "/cms/",
+]
+
+
+def is_boilerplate_page(url: str) -> bool:
+    url_lower = url.lower()
+    return any(pattern in url_lower for pattern in BOILERPLATE_URL_PATTERNS)
+
 # Human readable labels used in API responses / citations
 DOMAIN_LABELS = {
     "bookmytestcenter.com": "Main Website",
@@ -101,6 +119,10 @@ def build_chunks(chunk_size: int = 400, overlap: int = 60) -> list:
     all_chunks = []
 
     for page in pages:
+        if is_boilerplate_page(page.get("url", "")):
+            logger.info(f"Skipping boilerplate page (not product content): {page.get('url')}")
+            continue
+
         cleaned = clean_text(page.get("text", ""))
         if not cleaned:
             continue

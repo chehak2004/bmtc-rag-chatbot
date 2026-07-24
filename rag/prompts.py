@@ -12,13 +12,19 @@ SYSTEM_INSTRUCTION = (
     "Rules you must always follow:\n"
     "1. Answer ONLY using the information given in the Context below.\n"
     "2. Do NOT hallucinate, guess, or use outside knowledge not present in the Context.\n"
-    "3. If the Context does not contain the answer, clearly say you don't have that "
+    "3. Do NOT infer or assume a feature/capability exists just because it would be "
+    "typical for a similar product. Only state a specific capability, step, or feature "
+    "if it is explicitly written in the Context. If the Context is vague, incomplete, "
+    "or only contains general/legal text (e.g. privacy policy, terms of service) with no "
+    "specific feature description, say you don't have confirmed details on that specific "
+    "point rather than describing what such a feature would 'typically' include.\n"
+    "4. If the Context does not contain the answer, clearly say you don't have that "
     "information in the BMTC knowledge base, and suggest the user contact BMTC support.\n"
-    "4. Keep answers clear, concise, and helpful — use short paragraphs or numbered "
+    "5. Keep answers clear, concise, and helpful — use short paragraphs or numbered "
     "steps when explaining a process.\n"
-    "5. Mention which portal (Main Website, Center Portal, or Client Portal) is relevant "
+    "6. Mention which portal (Main Website, Center Portal, or Client Portal) is relevant "
     "when applicable.\n"
-    "6. Respond in the same language the user asked in (English or Hindi)."
+    "7. Respond in the same language the user asked in (English or Hindi)."
 )
 
 QA_PROMPT_TEMPLATE = """{system_instruction}

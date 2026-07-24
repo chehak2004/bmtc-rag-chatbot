@@ -19,9 +19,11 @@ class Settings:
     # --- Gemini ---
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODELS: list = _get_list(os.getenv("GEMINI_MODELS", "gemini-2.5-flash,gemini-1.5-flash"))
+    GEMINI_TEMPERATURE: float = float(os.getenv("GEMINI_TEMPERATURE", 0.2))
+    GEMINI_MAX_OUTPUT_TOKENS: int = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", 1024))
 
     # --- Embeddings ---
-    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+    EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
     # --- Retrieval ---
     TOP_K: int = int(os.getenv("TOP_K", 5))

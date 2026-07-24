@@ -121,12 +121,19 @@ def call_gemini(prompt: str) -> str:
     """
     client = _get_gemini_client()
 
+    from google.genai import types
+    generation_config = types.GenerateContentConfig(
+        temperature=settings.GEMINI_TEMPERATURE,
+        max_output_tokens=settings.GEMINI_MAX_OUTPUT_TOKENS,
+    )
+
     last_error = None
     for model_name in settings.GEMINI_MODELS:
         try:
             response = client.models.generate_content(
                 model=model_name,
                 contents=prompt,
+                config=generation_config,
             )
             text = getattr(response, "text", None)
             if text and text.strip():
