@@ -20,7 +20,6 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from config import settings
 from logger import logger
-from ingestion.embedder import get_embedding_model
 
 
 @dataclass
@@ -75,8 +74,8 @@ class Retriever:
             return []
 
         top_k = top_k or settings.TOP_K
-        model = get_embedding_model()
-        query_vec = model.encode([query], normalize_embeddings=True, convert_to_numpy=True).astype("float32")
+        from ingestion.embedder import embed_texts
+        query_vec = embed_texts([query])
 
         scores, indices = self.index.search(query_vec, top_k)
 

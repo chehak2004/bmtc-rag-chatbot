@@ -26,9 +26,8 @@ COPY . .
 RUN mkdir -p data/raw data/processed embeddings/faiss_index logs
 
 # Pre-download the embedding model at build time so cold-starts don't hit
-# huggingface.co on every container restart. Comment out if you'd rather
-# do this at ingestion time / don't want network access during build.
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+# the model host on every container restart.
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2')"
 
 EXPOSE 8000
 

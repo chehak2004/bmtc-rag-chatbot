@@ -1,9 +1,18 @@
 """
 embedder.py
 -----------
-Generates SentenceTransformer embeddings for the processed text chunks and
-builds/persists a FAISS similarity index, along with a metadata sidecar file
-that maps FAISS row index -> chunk metadata (text, source url, label, etc).
+Generates text embeddings for the processed chunks using `fastembed`
+(ONNX Runtime under the hood — no PyTorch), and builds/persists a FAISS
+similarity index, along with a metadata sidecar file that maps FAISS row
+index -> chunk metadata (text, source url, label, etc).
+
+Why fastembed instead of sentence-transformers/PyTorch:
+PyTorch's baseline memory footprint (300-500MB+) is too heavy for small
+free-tier hosting (e.g. Render's 512MB free instances), causing OOM restarts
+under real request load. fastembed uses quantized ONNX models and typically
+runs comfortably in well under 200MB total, at a small cost in raw embedding
+speed/accuracy that doesn't meaningfully affect retrieval quality for a
+knowledge base of this size.
 
 Artifacts produced:
     embeddings/faiss_index/index.faiss   -> FAISS index (cosine sim via inner product on normalized vectors)
@@ -15,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 import faiss
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
@@ -25,25 +34,28 @@ from logger import logger
 _model_cache = {}
 
 
-def get_embedding_model() -> SentenceTransformer:
-    """Cache the SentenceTransformer model so it's only loaded once per process."""
+def get_embedding_model() -> TextEmbedding:
+    """Cache the fastembed model so it's only loaded once per process."""
     name = settings.EMBEDDING_MODEL
     if name not in _model_cache:
-        logger.info(f"Loading SentenceTransformer model: {name}")
-        _model_cache[name] = SentenceTransformer(name)
+        logger.info(f"Loading fastembed model: {name}")
+        _model_cache[name] = TextEmbedding(model_name=name, threads=1)
     return _model_cache[name]
+
+
+def _l2_normalize(vectors: np.ndarray) -> np.ndarray:
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0  # avoid divide-by-zero for empty/degenerate vectors
+    return vectors / norms
 
 
 def embed_texts(texts: list) -> np.ndarray:
     model = get_embedding_model()
-    embeddings = model.encode(
-        texts,
-        batch_size=32,
-        show_progress_bar=True,
-        convert_to_numpy=True,
-        normalize_embeddings=True,  # so inner product == cosine similarity
-    )
-    return embeddings.astype("float32")
+    # fastembed returns a generator of np.ndarray, one per input text
+    raw = np.array(list(model.embed(texts, batch_size=32)), dtype="float32")
+    # normalize ourselves so inner product == cosine similarity (matches
+    # how retriever.py / FAISS IndexFlatIP expect vectors to be prepared)
+    return _l2_normalize(raw).astype("float32")
 
 
 def load_chunks() -> list:
@@ -58,7 +70,7 @@ def load_chunks() -> list:
 
 def build_faiss_index(chunks: list):
     texts = [c["text"] for c in chunks]
-    logger.info(f"Embedding {len(texts)} chunks using '{settings.EMBEDDING_MODEL}'...")
+    logger.info(f"Embedding {len(texts)} chunks using '{settings.EMBEDDING_MODEL}' (fastembed/ONNX)...")
     embeddings = embed_texts(texts)
 
     dim = embeddings.shape[1]
