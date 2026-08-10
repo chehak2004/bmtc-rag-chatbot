@@ -1,44 +1,27 @@
 /* ==========================================================================
-   BMTC Assistant — Frontend logic
-   Handles: sending questions to /chat, rendering bubbles, loading state,
-   voice input (Web Speech API), text-to-speech, health check, and the
-   ticket "REF" code / status dot.
+   BMTC Assistant — Frontend logic (glassmorphism UI)
+   Wires up: chat send (button + Enter), typing indicator, voice input,
+   auto text-to-speech of replies, health status, textarea auto-resize.
    ========================================================================== */
 
-const API_BASE = window.location.origin; // same-origin backend
+const API_BASE = window.location.origin;
 const CHAT_ENDPOINT = `${API_BASE}/chat`;
 const HEALTH_ENDPOINT = `${API_BASE}/health`;
 
-const chatLog = document.getElementById("chatLog");
-const composerForm = document.getElementById("composerForm");
-const messageInput = document.getElementById("messageInput");
-const sendBtn = document.getElementById("sendBtn");
-const micBtn = document.getElementById("micBtn");
-const typingIndicator = document.getElementById("typingIndicator");
+const chatBox = document.getElementById("chat-box");
+const typingIndicator = document.getElementById("typing");
+const questionInput = document.getElementById("question");
+const sendBtn = document.getElementById("send-btn");
+const voiceBtn = document.getElementById("voice-btn");
 const statusDot = document.getElementById("statusDot");
 const statusText = document.getElementById("statusText");
-const sessionRef = document.getElementById("sessionRef");
-const ttsToggle = document.getElementById("ttsToggle");
 
-const SOURCE_COLORS = {
-  "Main Website": "#0C7C74",
-  "Center Portal": "#D98F2B",
-  "Client Portal": "#7C9CF2",
-};
+// Tracks the most recent sendMessage() call, so a late/out-of-order response
+// never speaks over (or instead of) the answer to a newer question.
+let currentTurnId = 0;
 
 // ---------------------------------------------------------------------------
-// Session ref (cosmetic, mirrors an admit-card reference number)
-// ---------------------------------------------------------------------------
-function generateRef() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let ref = "";
-  for (let i = 0; i < 8; i++) ref += chars[Math.floor(Math.random() * chars.length)];
-  return ref;
-}
-sessionRef.textContent = generateRef();
-
-// ---------------------------------------------------------------------------
-// Health check -> updates the status dot / subtitle
+// Health check
 // ---------------------------------------------------------------------------
 async function checkHealth() {
   try {
@@ -46,116 +29,95 @@ async function checkHealth() {
     if (!res.ok) throw new Error("bad status");
     const data = await res.json();
     if (data.index_ready) {
-      statusDot.classList.remove("offline");
-      statusDot.classList.add("online");
-      statusText.textContent = `Knowledge base ready · ${data.total_vectors} indexed passages`;
+      statusDot.style.background = "#22c55e";
+      statusText.textContent = "Online";
     } else {
-      statusDot.classList.remove("online");
-      statusDot.classList.add("offline");
-      statusText.textContent = "Knowledge base is empty — run the ingestion pipeline";
+      statusDot.style.background = "#f59e0b";
+      statusText.textContent = "Knowledge base empty";
     }
   } catch (e) {
-    statusDot.classList.remove("online");
-    statusDot.classList.add("offline");
-    statusText.textContent = "Unable to reach BMTC Assistant backend";
+    statusDot.style.background = "#ef4444";
+    statusText.textContent = "Offline";
   }
 }
 checkHealth();
 
 // ---------------------------------------------------------------------------
-// Rendering helpers
+// Rendering
 // ---------------------------------------------------------------------------
 function scrollToBottom() {
-  chatLog.scrollTop = chatLog.scrollHeight;
+  chatBox.scrollTop = chatBox.scrollHeight;
 }
 
 function appendUserMessage(text) {
-  const msg = document.createElement("div");
-  msg.className = "msg msg--user";
-  msg.innerHTML = `<div class="msg__bubble"></div>`;
-  msg.querySelector(".msg__bubble").textContent = text;
-  chatLog.appendChild(msg);
+  const el = document.createElement("div");
+  el.className = "user-message";
+  el.textContent = text;
+  chatBox.appendChild(el);
   scrollToBottom();
 }
 
-function confidenceBadgeClass(score) {
-  if (score >= 0.6) return "high";
-  if (score >= 0.35) return "med";
-  return "low";
+function formatAnswer(text) {
+  const div = document.createElement("div");
+  div.textContent = text;
+  return div.innerHTML.replace(/\n/g, "<br>");
 }
 
-function appendBotMessage({ answer, confidence, sources, used_llm, isError }) {
-  const msg = document.createElement("div");
-  msg.className = "msg msg--bot" + (isError ? " msg--error" : "");
+function appendBotMessage({ answer, confidence, sources, used_llm, isError, shouldSpeak = true }) {
+  const el = document.createElement("div");
+  el.className = "bot-message";
 
-  const bubble = document.createElement("div");
-  bubble.className = "msg__bubble";
-  bubble.innerHTML = escapeAndLinkify(answer);
-  msg.appendChild(bubble);
+  const header = document.createElement("div");
+  header.className = "message-header";
+  header.innerHTML = `<i class="fa-solid fa-robot"></i> BMTC Assistant`;
+  el.appendChild(header);
 
-  const meta = document.createElement("div");
-  meta.className = "msg__meta";
+  const body = document.createElement("div");
+  body.className = "message-body";
+  body.innerHTML = formatAnswer(answer);
+  el.appendChild(body);
 
-  if (!isError) {
-    (sources || []).forEach((label) => {
-      const stamp = document.createElement("span");
-      stamp.className = "sourceStamp";
-      const dot = document.createElement("span");
-      dot.className = "sourceStamp__dot";
-      dot.style.background = SOURCE_COLORS[label] || "#5B677A";
-      stamp.appendChild(dot);
-      stamp.appendChild(document.createTextNode(label));
-      meta.appendChild(stamp);
-    });
-
-    if (typeof confidence === "number") {
-      const badge = document.createElement("span");
-      badge.className = `confBadge ${confidenceBadgeClass(confidence)}`;
-      badge.textContent = `confidence ${(confidence * 100).toFixed(0)}%`;
-      meta.appendChild(badge);
-    }
-
-    if (used_llm === false) {
-      const badge = document.createElement("span");
-      badge.className = "confBadge med";
-      badge.textContent = "fallback mode";
-      meta.appendChild(badge);
-    }
+  if (!isError && (sources?.length || typeof confidence === "number")) {
+    const meta = document.createElement("div");
+    meta.style.marginTop = "10px";
+    meta.style.fontSize = "12px";
+    meta.style.opacity = "0.65";
+    const parts = [];
+    if (sources?.length) parts.push(sources.join(" · "));
+    if (typeof confidence === "number") parts.push(`confidence ${(confidence * 100).toFixed(0)}%`);
+    if (used_llm === false) parts.push("fallback mode");
+    meta.textContent = parts.join("  •  ");
+    el.appendChild(meta);
   }
 
-  msg.appendChild(meta);
-  chatLog.appendChild(msg);
+  chatBox.appendChild(el);
   scrollToBottom();
 
-  if (ttsToggle.checked && !isError) {
+  if (!isError && shouldSpeak) {
     speak(answer);
   }
 }
 
-function escapeAndLinkify(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  let escaped = div.innerHTML;
-  escaped = escaped.replace(/\n/g, "<br>");
-  return escaped;
-}
-
 function setLoading(isLoading) {
   sendBtn.disabled = isLoading;
-  messageInput.disabled = isLoading;
-  typingIndicator.hidden = !isLoading;
+  questionInput.disabled = isLoading;
+  typingIndicator.style.display = isLoading ? "flex" : "none";
   if (isLoading) scrollToBottom();
 }
 
 // ---------------------------------------------------------------------------
-// Send message to backend
+// Send message
 // ---------------------------------------------------------------------------
-async function sendMessage(question) {
-  question = question.trim();
+async function sendMessage() {
+  const question = questionInput.value.trim();
   if (!question) return;
 
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  const thisTurnId = ++currentTurnId;
+
   appendUserMessage(question);
-  messageInput.value = "";
+  questionInput.value = "";
+  autoResizeTextarea();
   setLoading(true);
 
   try {
@@ -176,30 +138,36 @@ async function sendMessage(question) {
       confidence: data.confidence,
       sources: data.sources,
       used_llm: data.used_llm,
+      shouldSpeak: thisTurnId === currentTurnId,
     });
   } catch (err) {
     console.error("Chat request failed:", err);
     appendBotMessage({
-      answer: "I couldn't reach the BMTC Assistant service. Please check your connection and try again in a moment.",
+      answer: "I couldn't reach the BMTC Assistant service. Please try again in a moment.",
       isError: true,
     });
   } finally {
     setLoading(false);
-    messageInput.focus();
+    questionInput.focus();
   }
 }
 
-composerForm.addEventListener("submit", (e) => {
-  e.preventDefault();
-  sendMessage(messageInput.value);
+sendBtn.addEventListener("click", sendMessage);
+
+// Enter sends; Shift+Enter inserts a newline (textarea, not a form)
+questionInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
 });
 
-// Enter key support (native via form submit); Shift+Enter not needed for single-line input.
-
-// Quick-ask buttons in the brand rail
-document.querySelectorAll(".quickAsk__btn").forEach((btn) => {
-  btn.addEventListener("click", () => sendMessage(btn.dataset.q));
-});
+// Auto-grow the textarea as the person types, up to the CSS max-height (140px)
+function autoResizeTextarea() {
+  questionInput.style.height = "auto";
+  questionInput.style.height = Math.min(questionInput.scrollHeight, 140) + "px";
+}
+questionInput.addEventListener("input", autoResizeTextarea);
 
 // ---------------------------------------------------------------------------
 // Voice input (Web Speech API)
@@ -212,28 +180,32 @@ if (SpeechRecognition) {
   recognizer = new SpeechRecognition();
   recognizer.continuous = false;
   recognizer.interimResults = false;
-  recognizer.lang = "en-IN"; // supports Hindi speech reasonably well too; user can still type Hindi directly
+  recognizer.lang = "en-IN";
 
   recognizer.onstart = () => {
     isListening = true;
-    micBtn.classList.add("listening");
+    voiceBtn.classList.add("listening");
+    voiceBtn.style.background = "#ef4444";
   };
   recognizer.onend = () => {
     isListening = false;
-    micBtn.classList.remove("listening");
+    voiceBtn.classList.remove("listening");
+    voiceBtn.style.background = "";
   };
   recognizer.onerror = (e) => {
     console.warn("Speech recognition error:", e.error);
     isListening = false;
-    micBtn.classList.remove("listening");
+    voiceBtn.classList.remove("listening");
+    voiceBtn.style.background = "";
   };
   recognizer.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
-    messageInput.value = transcript;
-    messageInput.focus();
+    questionInput.value = transcript;
+    autoResizeTextarea();
+    questionInput.focus();
   };
 
-  micBtn.addEventListener("click", () => {
+  voiceBtn.addEventListener("click", () => {
     if (isListening) {
       recognizer.stop();
     } else {
@@ -245,35 +217,30 @@ if (SpeechRecognition) {
     }
   });
 } else {
-  micBtn.disabled = true;
-  micBtn.title = "Voice input not supported in this browser";
-  micBtn.style.opacity = "0.4";
+  voiceBtn.disabled = true;
+  voiceBtn.title = "Voice input not supported in this browser";
+  voiceBtn.style.opacity = "0.4";
 }
 
 // ---------------------------------------------------------------------------
-// Text-to-speech
+// Text-to-speech (auto-speaks every bot reply; picks a real Hindi voice if
+// one is installed, otherwise falls back gracefully instead of failing silently)
 // ---------------------------------------------------------------------------
 let cachedVoices = [];
-let hindiVoiceWarningShown = false;
 
 function loadVoices() {
-  if ("speechSynthesis" in window) {
-    cachedVoices = window.speechSynthesis.getVoices();
-  }
+  if ("speechSynthesis" in window) cachedVoices = window.speechSynthesis.getVoices();
 }
-// Voices often load asynchronously — populate now and again when ready.
 loadVoices();
-if ("speechSynthesis" in window) {
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-}
+if ("speechSynthesis" in window) window.speechSynthesis.onvoiceschanged = loadVoices;
 
-function findVoiceForLang(langPrefix) {
-  return cachedVoices.find((v) => v.lang.toLowerCase().startsWith(langPrefix)) || null;
+function findVoiceForLang(prefix) {
+  return cachedVoices.find((v) => v.lang.toLowerCase().startsWith(prefix)) || null;
 }
 
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel(); // stop any ongoing speech
+  window.speechSynthesis.cancel();
 
   const isHindi = /[\u0900-\u097F]/.test(text);
   const utterance = new SpeechSynthesisUtterance(text);
@@ -284,23 +251,7 @@ function speak(text) {
       utterance.voice = hindiVoice;
       utterance.lang = hindiVoice.lang;
     } else {
-      // No Hindi voice installed on this system/browser — setting the lang
-      // tag alone won't make it speak Hindi; most browsers silently
-      // substitute a default (usually English) voice instead. Let the user
-      // know once, rather than failing silently and looking broken.
-      utterance.lang = "hi-IN";
-      if (!hindiVoiceWarningShown) {
-        hindiVoiceWarningShown = true;
-        appendBotMessage({
-          answer:
-            "Note: your browser/OS doesn't have a Hindi voice installed, so voice " +
-            "reply may sound off or default to English for Hindi answers. On Windows, " +
-            "you can add one via Settings → Time & Language → Speech → Add a voice → Hindi.",
-          isError: false,
-          sources: [],
-          confidence: null,
-        });
-      }
+      utterance.lang = "hi-IN"; // will fall back to a default voice if none installed
     }
   } else {
     utterance.lang = "en-IN";
@@ -312,5 +263,5 @@ function speak(text) {
   window.speechSynthesis.speak(utterance);
 }
 
-// Focus input on load for fast typing
-window.addEventListener("load", () => messageInput.focus());
+// Focus input on load
+window.addEventListener("load", () => questionInput.focus());
