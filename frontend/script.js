@@ -145,11 +145,47 @@ function appendBotMessage({ answer, confidence, sources, used_llm, isError, shou
 }
 
 function escapeAndLinkify(text) {
-  const div = document.createElement("div");
-  div.textContent = text;
-  let escaped = div.innerHTML;
-  escaped = escaped.replace(/\n/g, "<br>");
-  return escaped;
+  // Escape HTML special characters first (safety — never trust model output
+  // as raw HTML), then render a small, safe subset of markdown that Gemini
+  // commonly uses in answers: **bold**, "* " bullet lists, and "1. " numbered
+  // lists. This avoids showing literal asterisks/numbers-with-dots to the
+  // person while still keeping the structure of the answer readable.
+  const escapeDiv = document.createElement("div");
+  escapeDiv.textContent = text;
+  const escaped = escapeDiv.innerHTML;
+
+  const lines = escaped.split("\n");
+  let html = "";
+  let inUl = false;
+  let inOl = false;
+
+  const closeLists = () => {
+    if (inUl) { html += "</ul>"; inUl = false; }
+    if (inOl) { html += "</ol>"; inOl = false; }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const withBold = line.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+
+    if (/^\*\s+/.test(line)) {
+      // Bullet list item ("* text") — strip the marker, render as <li>
+      if (!inUl) { closeLists(); html += "<ul>"; inUl = true; }
+      html += `<li>${withBold.replace(/^\*\s+/, "")}</li>`;
+    } else if (/^\d+\.\s+/.test(line)) {
+      // Numbered list item ("1. text") — strip the marker, render as <li>
+      if (!inOl) { closeLists(); html += "<ol>"; inOl = true; }
+      html += `<li>${withBold.replace(/^\d+\.\s+/, "")}</li>`;
+    } else if (line === "") {
+      closeLists();
+      html += "<br>";
+    } else {
+      closeLists();
+      html += withBold + "<br>";
+    }
+  }
+  closeLists();
+  return html;
 }
 
 function setLoading(isLoading) {
