@@ -21,15 +21,6 @@ const statusText = document.getElementById("statusText");
 const sessionRef = document.getElementById("sessionRef");
 const ttsToggle = document.getElementById("ttsToggle");
 
-// If the person switches "Voice reply" off, stop any speech that's
-// currently playing right away rather than waiting for the next message.
-ttsToggle.addEventListener("change", () => {
-  if (!ttsToggle.checked && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-    muteBtn.hidden = true;
-  }
-});
-
 const SOURCE_COLORS = {
   "Main Website": "#0C7C74",
   "Center Portal": "#D98F2B",
@@ -40,6 +31,12 @@ const SOURCE_COLORS = {
 // older request's response arrives late (out of order), its speech never
 // plays over/instead of the current answer.
 let currentTurnId = 0;
+
+// If the person switches "Voice reply" off, stop any speech that's
+// currently playing right away rather than waiting for the next message.
+ttsToggle.addEventListener("change", () => {
+  if (!ttsToggle.checked) stopSpeaking();
+});
 
 // ---------------------------------------------------------------------------
 // Session ref (cosmetic, mirrors an admit-card reference number)
@@ -172,10 +169,7 @@ async function sendMessage(question) {
   // Stop any speech from a previous answer the instant a new question is
   // sent, and mark this as the new "latest" turn so a late-arriving older
   // response can never speak over / instead of the current one.
-  if ("speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-    muteBtn.hidden = true;
-  }
+  stopSpeaking();
   const thisTurnId = ++currentTurnId;
 
   appendUserMessage(question);
@@ -227,7 +221,7 @@ document.querySelectorAll(".quickAsk__btn").forEach((btn) => {
 });
 
 // ---------------------------------------------------------------------------
-// Voice input (Web Speech API)
+// Voice input (Web Speech API) — unchanged from before
 // ---------------------------------------------------------------------------
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
@@ -276,51 +270,78 @@ if (SpeechRecognition) {
 }
 
 // ---------------------------------------------------------------------------
-// Text-to-speech
+// Text-to-speech (browser-native Web Speech API — client-side, no backend
+// changes). Fixes the Hindi voice-selection issue by:
+//   1. Loading speechSynthesis.getVoices() AND listening for the async
+//      'voiceschanged' event, since voice lists often populate late.
+//   2. Explicitly detecting Hindi replies via the Devanagari Unicode range
+//      (U+0900–U+097F) rather than trusting the browser to guess.
+//   3. Actively searching the loaded voice list for a Hindi (hi / hi-IN)
+//      voice and assigning it directly via utterance.voice — setting only
+//      utterance.lang is not enough; browsers silently fall back to a
+//      default (usually English) voice if no matching voice is assigned.
+//   4. Preferring a LOCAL/offline Hindi voice over a remote network voice
+//      when both are available, since remote voices (e.g. Chrome's
+//      "Google हिन्दी") can silently fail to produce audio depending on
+//      network conditions even though the browser lists them as available.
+//   5. Falling back gracefully (with a one-time in-chat notice) if no
+//      Hindi voice is installed at all, instead of failing silently.
 // ---------------------------------------------------------------------------
 let cachedVoices = [];
 let hindiVoiceWarningShown = false;
+let currentUtterance = null;
 
 function loadVoices() {
   if ("speechSynthesis" in window) {
     cachedVoices = window.speechSynthesis.getVoices();
   }
 }
-// Voices often load asynchronously — populate now and again when ready.
+// Voices often load asynchronously — populate now, and again once the
+// browser fires 'voiceschanged' (Chrome/Edge commonly need this event).
 loadVoices();
 if ("speechSynthesis" in window) {
   window.speechSynthesis.onvoiceschanged = loadVoices;
 }
 
 function findVoiceForLang(langPrefix) {
-  return cachedVoices.find((v) => v.lang.toLowerCase().startsWith(langPrefix)) || null;
+  const matches = cachedVoices.filter((v) => v.lang.toLowerCase().startsWith(langPrefix));
+  if (matches.length === 0) return null;
+  // Prefer a local/offline voice over a remote (network) one — remote
+  // voices depend on reaching an external TTS server and can silently
+  // produce no audio if that's blocked or unreliable on this network.
+  const localMatch = matches.find((v) => v.localService === true);
+  return localMatch || matches[0];
 }
 
 function speak(text) {
   if (!("speechSynthesis" in window)) return;
-  window.speechSynthesis.cancel(); // stop any ongoing speech
+  stopSpeaking(); // stop any ongoing speech before starting new speech
 
   const isHindi = /[\u0900-\u097F]/.test(text);
   const utterance = new SpeechSynthesisUtterance(text);
 
   if (isHindi) {
-    const hindiVoice = findVoiceForLang("hi");
+    // Try hi-IN first (most specific), then fall back to any 'hi*' voice.
+    const hindiVoice = findVoiceForLang("hi-in") || findVoiceForLang("hi");
     if (hindiVoice) {
       utterance.voice = hindiVoice;
       utterance.lang = hindiVoice.lang;
     } else {
-      // No Hindi voice installed on this system/browser — setting the lang
-      // tag alone won't make it speak Hindi; most browsers silently
-      // substitute a default (usually English) voice instead. Let the user
-      // know once, rather than failing silently and looking broken.
+      // No Hindi voice installed on this system/browser. Setting the lang
+      // tag alone will NOT make it speak Hindi — most browsers silently
+      // substitute a default (usually English) voice instead. Let the
+      // person know once, rather than failing silently and looking broken.
       utterance.lang = "hi-IN";
       if (!hindiVoiceWarningShown) {
         hindiVoiceWarningShown = true;
         appendBotMessage({
           answer:
-            "Note: your browser/OS doesn't have a Hindi voice installed, so voice " +
-            "reply may sound off or default to English for Hindi answers. On Windows, " +
-            "you can add one via Settings → Time & Language → Speech → Add a voice → Hindi.",
+            "Note: this browser/OS doesn't have a Hindi voice installed, so voice " +
+            "reply may sound off or default to English for Hindi answers. On Windows: " +
+            "Settings → Time & Language → Speech → Add a voice → Hindi. " +
+            "In Chrome/Edge, a Hindi voice ('Google हिन्दी' or a Microsoft Hindi voice) " +
+            "should then appear automatically — no restart of this page needed, though " +
+            "restarting the browser helps it register the new voice.",
           isError: false,
           sources: [],
           confidence: null,
@@ -336,18 +357,24 @@ function speak(text) {
   utterance.rate = 1.0;
 
   utterance.onstart = () => { muteBtn.hidden = false; };
-  utterance.onend = () => { muteBtn.hidden = true; };
-  utterance.onerror = () => { muteBtn.hidden = true; };
+  utterance.onend = () => { muteBtn.hidden = true; currentUtterance = null; };
+  utterance.onerror = () => { muteBtn.hidden = true; currentUtterance = null; };
 
+  currentUtterance = utterance;
   window.speechSynthesis.speak(utterance);
+}
+
+// Shared stop helper — used by the mute button, the "Voice reply" toggle
+// being switched off, and whenever a new message is sent.
+function stopSpeaking() {
+  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+  currentUtterance = null;
+  muteBtn.hidden = true;
 }
 
 // Dedicated mute button: instantly stops whatever is currently being read
 // aloud, without affecting the "Voice reply" toggle for future messages.
-muteBtn.addEventListener("click", () => {
-  if ("speechSynthesis" in window) window.speechSynthesis.cancel();
-  muteBtn.hidden = true;
-});
+muteBtn.addEventListener("click", stopSpeaking);
 
 // Focus input on load for fast typing
 window.addEventListener("load", () => messageInput.focus());
