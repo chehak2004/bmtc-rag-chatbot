@@ -304,6 +304,39 @@ input { font-family: inherit; }
   font-size: 14.5px;
   line-height: 1.55;
 }
+.msg__bubble ul, .msg__bubble ol {
+  margin: 6px 0 6px 4px;
+  padding: 0 0 0 18px;
+}
+.msg__bubble ul {
+  list-style: none;
+}
+.msg__bubble ul li {
+  position: relative;
+  padding-left: 4px;
+}
+.msg__bubble ul li::before {
+  content: "";
+  position: absolute;
+  left: -14px;
+  top: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--teal);
+}
+.msg--user .msg__bubble ul li::before {
+  background: #fff;
+}
+.msg__bubble ol {
+  list-style: decimal;
+}
+.msg__bubble li {
+  margin-bottom: 4px;
+}
+.msg__bubble strong {
+  font-weight: 600;
+}
 .msg--bot .msg__bubble {
   background: #fff;
   border: 1px solid var(--line);
