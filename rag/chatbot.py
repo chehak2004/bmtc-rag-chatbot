@@ -97,16 +97,112 @@ def translate_text(text: str, target_lang: str) -> str:
         return text
 
 
+def _has_markdown_structure(text: str) -> bool:
+    """Detects whether text already has bullet/numbered/bold markdown
+    structure on its own lines (as our curated seed content now does), in
+    which case it should NOT be re-flowed through sentence-based
+    paragraphizing — doing so would merge separate bullet/numbered lines
+    together and destroy the structure. Plain-prose scraped content (which
+    has no such structure) still benefits from paragraphizing."""
+    for line in text.split("\n"):
+        line = line.strip()
+        if re.match(r"^\*\s+", line) or re.match(r"^\d+\.\s+", line):
+            return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# Conversational intent shortcuts (greetings, thanks, farewells, "who are
+# you"-style meta questions). These are handled directly, without touching
+# retrieval/Gemini at all — they don't need knowledge-base grounding, and
+# routing them through the normal RAG pipeline would either produce a bad
+# robotic "couldn't find this in the knowledge base" refusal (since a
+# greeting has no meaningful similarity to any BMTC content chunk) or waste
+# an LLM call on something a simple pattern match handles instantly and
+# reliably.
+# ---------------------------------------------------------------------------
+_GREETING_PATTERNS = [
+    r"^h(i|ey|ello)+!?$", r"^good\s*(morning|afternoon|evening)!?$",
+    r"^नमस्ते!?$", r"^नमस्कार!?$", r"^हैलो!?$",
+]
+_THANKS_PATTERNS = [
+    r"^thanks?( you)?!?$", r"^thank\s*you( so much| a lot)?!?$", r"^(ty|thx)!?$",
+    r"^धन्यवाद!?$", r"^शुक्रिया!?$",
+]
+_FAREWELL_PATTERNS = [
+    r"^bye!?$", r"^goodbye!?$", r"^see\s*you!?$", r"^अलविदा!?$", r"^बाय!?$",
+]
+_ABOUT_BOT_PATTERNS = [
+    r"^who are you\??$", r"^what are you\??$", r"^what can you (do|help with)\??$",
+    r"^what do you do\??$", r"^tum kaun ho\??$", r"^आप कौन हैं\??$", r"^आप क्या कर सकते हैं\??$",
+]
+
+_CANNED_RESPONSES = {
+    "greeting": {
+        "en": "Hello! I'm the BMTC Assistant. I can help with candidate registration, "
+              "the Center Portal, the Client Portal, bookings, and general FAQs. What "
+              "would you like to know?",
+        "hi": "नमस्ते! मैं BMTC Assistant हूँ। मैं उम्मीदवार पंजीकरण, सेंटर पोर्टल, क्लाइंट पोर्टल, "
+              "बुकिंग और सामान्य प्रश्नों में मदद कर सकता हूँ। आप क्या जानना चाहते हैं?",
+    },
+    "thanks": {
+        "en": "You're welcome! Let me know if there's anything else you'd like to know about BMTC.",
+        "hi": "आपका स्वागत है! अगर BMTC के बारे में कुछ और जानना हो तो बताइए।",
+    },
+    "farewell": {
+        "en": "Goodbye! Feel free to come back anytime you have a question about BMTC.",
+        "hi": "अलविदा! जब भी BMTC से जुड़ा कोई सवाल हो, आप कभी भी वापस आ सकते हैं।",
+    },
+    "about_bot": {
+        "en": "I'm the BMTC Assistant — I answer questions about BookMyTestCenter's "
+              "candidate registration, the Center Portal, the Client Portal, exam "
+              "bookings, and general FAQs, based on official BMTC documentation.",
+        "hi": "मैं BMTC Assistant हूँ — मैं BookMyTestCenter के उम्मीदवार पंजीकरण, सेंटर पोर्टल, "
+              "क्लाइंट पोर्टल, परीक्षा बुकिंग और सामान्य प्रश्नों के बारे में आधिकारिक BMTC "
+              "दस्तावेज़ों के आधार पर जवाब देता हूँ।",
+    },
+}
+
+
+def _detect_conversational_intent(question: str) -> str:
+    """Returns 'greeting' / 'thanks' / 'farewell' / 'about_bot' if the
+    message matches one of those patterns exactly (after trimming/lowering
+    for the English patterns), else None. Intentionally conservative —
+    only matches short, unambiguous conversational messages, never partial
+    matches within a longer real question, so it can't accidentally
+    swallow an actual BMTC question that happens to start with "hi" etc."""
+    normalized = question.strip()
+    normalized_lower = normalized.lower()
+
+    for pattern in _GREETING_PATTERNS:
+        if re.match(pattern, normalized_lower) or re.match(pattern, normalized):
+            return "greeting"
+    for pattern in _THANKS_PATTERNS:
+        if re.match(pattern, normalized_lower) or re.match(pattern, normalized):
+            return "thanks"
+    for pattern in _FAREWELL_PATTERNS:
+        if re.match(pattern, normalized_lower) or re.match(pattern, normalized):
+            return "farewell"
+    for pattern in _ABOUT_BOT_PATTERNS:
+        if re.match(pattern, normalized_lower) or re.match(pattern, normalized):
+            return "about_bot"
+    return None
+
+
 def _paragraphize(text: str, sentences_per_paragraph: int = 2) -> str:
     """
     Breaks a dense block of prose into readable paragraphs by grouping a few
     sentences at a time. Used specifically for fallback answers (raw
-    retrieved context), which — unlike normal Gemini-authored answers — have
-    no inherent paragraph/list structure and would otherwise render as one
-    long wall of text in the chat UI.
+    retrieved context) that have no inherent paragraph/list structure of
+    their own — typically plain-prose scraped content, as opposed to our
+    curated seed content, which already carries real markdown structure and
+    is left untouched (see _has_markdown_structure).
     """
     text = text.strip()
     if not text:
+        return text
+
+    if _has_markdown_structure(text):
         return text
 
     # Split on sentence-ending punctuation (., !, ?, or Hindi danda ।)
@@ -219,6 +315,21 @@ def generate_answer(question: str) -> ChatResponse:
     user_lang = detect_language(question)
     logger.info(f"Incoming question (lang={user_lang}): {question}")
 
+    # Conversational shortcuts (greetings, thanks, farewells, "who are you")
+    # bypass retrieval/Gemini entirely — see _detect_conversational_intent.
+    intent = _detect_conversational_intent(question)
+    if intent:
+        logger.info(f"Detected conversational intent: {intent}")
+        canned = _CANNED_RESPONSES[intent]
+        answer = canned.get(user_lang, canned["en"])
+        return ChatResponse(
+            answer=answer,
+            confidence=1.0,
+            sources=[],
+            language=user_lang,
+            used_llm=False,
+        )
+
     # Retrieve relevant chunks (retrieval always happens in English-embedding space;
     # translating the query to English first improves retrieval quality for Hindi input)
     retrieval_query = question
@@ -228,9 +339,13 @@ def generate_answer(question: str) -> ChatResponse:
     results = retriever.retrieve(retrieval_query, top_k=settings.TOP_K)
     confidence = retriever.top_score(results)
 
-    if not retriever.passes_threshold(results):
-        logger.info(f"Confidence {confidence:.3f} below threshold "
-                    f"{settings.SIMILARITY_THRESHOLD}. Returning 'not found' message.")
+    # --- Tier 1: confidence too low even for a clarifying attempt -> this
+    # is genuinely out of scope (e.g. "what is the capital of France").
+    # Never call the LLM here — hardcoded refusal keeps the
+    # anti-hallucination guarantee airtight for clearly unrelated questions.
+    if confidence < settings.CLARIFICATION_THRESHOLD or not results:
+        logger.info(f"Confidence {confidence:.3f} below clarification floor "
+                    f"{settings.CLARIFICATION_THRESHOLD}. Returning 'not found' message.")
         message = NO_CONTEXT_MESSAGE_HI if user_lang == "hi" else NO_CONTEXT_MESSAGE_EN
         return ChatResponse(
             answer=message,
@@ -239,6 +354,19 @@ def generate_answer(question: str) -> ChatResponse:
             language=user_lang,
             used_llm=False,
         )
+
+    # --- Tier 2 & 3: confidence is at least plausible. Whether it's a
+    # confident direct answer (Tier 3, >= SIMILARITY_THRESHOLD) or an
+    # ambiguous/underspecified question that's still plausibly BMTC-related
+    # (Tier 2, between the two thresholds), both go to Gemini with the same
+    # context — the prompt itself (see prompts.py rule 5) instructs the
+    # model to ask a clarifying question rather than guess when the
+    # question is vague, so we don't need separate prompt paths here.
+    is_ambiguous_zone = confidence < settings.SIMILARITY_THRESHOLD
+    if is_ambiguous_zone:
+        logger.info(f"Confidence {confidence:.3f} in ambiguous zone "
+                    f"[{settings.CLARIFICATION_THRESHOLD}, {settings.SIMILARITY_THRESHOLD}) — "
+                    f"asking Gemini to clarify rather than refusing outright.")
 
     context = build_context(results)
     sources = unique_sources(results)

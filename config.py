@@ -22,12 +22,28 @@ class Settings:
     GEMINI_TEMPERATURE: float = float(os.getenv("GEMINI_TEMPERATURE", 0.2))
     GEMINI_MAX_OUTPUT_TOKENS: int = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", 1024))
 
+    # --- Server-side Text-to-Speech (Gemini TTS) ---
+    TTS_ENABLED: bool = os.getenv("TTS_ENABLED", "true").lower() == "true"
+    TTS_MODEL: str = os.getenv("TTS_MODEL", "gemini-2.5-flash-preview-tts")
+    TTS_VOICE_EN: str = os.getenv("TTS_VOICE_EN", "Kore")
+    TTS_VOICE_HI: str = os.getenv("TTS_VOICE_HI", "Kore")
+
     # --- Embeddings ---
     EMBEDDING_MODEL: str = os.getenv("EMBEDDING_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
 
-    # --- Retrieval ---
+    # --- Retrieval / confidence gating ---
     TOP_K: int = int(os.getenv("TOP_K", 5))
-    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", 0.35))
+    # Above this score: confident, direct grounded answer.
+    SIMILARITY_THRESHOLD: float = float(os.getenv("SIMILARITY_THRESHOLD", 0.45))
+    # Between CLARIFICATION_THRESHOLD and SIMILARITY_THRESHOLD: ambiguous zone —
+    # the question is plausibly BMTC-related but underspecified (e.g. "I'm
+    # having trouble with the form" without saying which one). Rather than
+    # refusing outright, the model is asked to pose one clarifying question.
+    # Below CLARIFICATION_THRESHOLD: treated as genuinely out of scope /
+    # no relevant knowledge at all -> hardcoded "not found" message, no LLM
+    # call (keeps the anti-hallucination guarantee for clearly unrelated
+    # questions like "what is the capital of France").
+    CLARIFICATION_THRESHOLD: float = float(os.getenv("CLARIFICATION_THRESHOLD", 0.15))
 
     # --- Paths ---
     RAW_DATA_DIR: Path = BASE_DIR / os.getenv("RAW_DATA_DIR", "data/raw")

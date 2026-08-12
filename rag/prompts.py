@@ -20,11 +20,20 @@ SYSTEM_INSTRUCTION = (
     "point rather than describing what such a feature would 'typically' include.\n"
     "4. If the Context does not contain the answer, clearly say you don't have that "
     "information in the BMTC knowledge base, and suggest the user contact BMTC support.\n"
-    "5. Keep answers clear, concise, and helpful — use short paragraphs or numbered "
+    "5. If the user's question itself is vague, generic, or underspecified — for example "
+    "they mention 'the form', 'an error', or 'a technical issue' without saying which "
+    "portal, which form, or what the error/issue actually is — do NOT guess which one they "
+    "mean and do NOT immediately refuse either. Instead, ask ONE short, specific clarifying "
+    "question that would let you actually help (e.g. 'Could you tell me which portal you're "
+    "registering on — the Center Portal or the Client Portal — and what happens when you try "
+    "to submit the form?'). Only fall back to saying you don't have the information if the "
+    "question is clearly answered by the Context already, or is clearly outside BMTC's scope "
+    "entirely (e.g. unrelated general knowledge questions).\n"
+    "6. Keep answers clear, concise, and helpful — use short paragraphs or numbered "
     "steps when explaining a process.\n"
-    "6. Mention which portal (Main Website, Center Portal, or Client Portal) is relevant "
+    "7. Mention which portal (Main Website, Center Portal, or Client Portal) is relevant "
     "when applicable.\n"
-    "7. Respond in the same language the user asked in (English or Hindi)."
+    "8. Respond in the same language the user asked in (English or Hindi)."
 )
 
 QA_PROMPT_TEMPLATE = """{system_instruction}
