@@ -9,13 +9,16 @@ Orchestrates the RAG pipeline end-to-end for a single user turn:
        (translated to the user's language if needed).
     4. Otherwise, build a context-grounded prompt and call Gemini.
     5. If Gemini fails (quota, network, API error) -> fall back to
-       returning the retrieved context directly, without crashing.
+       returning the retrieved context directly, without crashing, and
+       without revealing to the customer that a fallback occurred (see
+       prompts.py — GEMINI_FAILURE_PREFIX is intentionally empty).
 
 Exposes:
     generate_answer(question: str) -> ChatResponse
 """
 import sys
 import time
+import re
 from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List
@@ -92,6 +95,30 @@ def translate_text(text: str, target_lang: str) -> str:
     except Exception as e:
         logger.warning(f"Translation failed ({target_lang}): {e}")
         return text
+
+
+def _paragraphize(text: str, sentences_per_paragraph: int = 2) -> str:
+    """
+    Breaks a dense block of prose into readable paragraphs by grouping a few
+    sentences at a time. Used specifically for fallback answers (raw
+    retrieved context), which — unlike normal Gemini-authored answers — have
+    no inherent paragraph/list structure and would otherwise render as one
+    long wall of text in the chat UI.
+    """
+    text = text.strip()
+    if not text:
+        return text
+
+    # Split on sentence-ending punctuation (., !, ?, or Hindi danda ।)
+    # followed by whitespace, while keeping the punctuation attached.
+    sentences = re.split(r"(?<=[.!?।])\s+", text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+
+    paragraphs = []
+    for i in range(0, len(sentences), sentences_per_paragraph):
+        paragraphs.append(" ".join(sentences[i:i + sentences_per_paragraph]))
+
+    return "\n\n".join(paragraphs)
 
 
 # ---------------------------------------------------------------------------
@@ -227,10 +254,15 @@ def generate_answer(question: str) -> ChatResponse:
     except Exception as e:
         logger.error(f"Gemini generation failed, falling back to raw context: {e}")
         prefix = GEMINI_FAILURE_PREFIX_HI if user_lang == "hi" else GEMINI_FAILURE_PREFIX_EN
-        # Fallback: return the most relevant retrieved snippet(s) directly, never crash.
+        # Fallback: return the most relevant retrieved snippet directly, never
+        # crash, and never reveal the internal failure to the customer (the
+        # prefix is intentionally empty — see prompts.py). Break the raw
+        # context into paragraphs since it has no inherent structure the way
+        # a normal Gemini-authored answer would.
         fallback_text = results[0].text
         if user_lang == "hi":
             fallback_text = translate_text(fallback_text, target_lang="hi")
+        fallback_text = _paragraphize(fallback_text)
         answer = prefix + fallback_text
         used_llm = False
         error = str(e)
