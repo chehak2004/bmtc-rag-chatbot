@@ -21,6 +21,37 @@ const statusText = document.getElementById("statusText");
 const sessionRef = document.getElementById("sessionRef");
 const ttsToggle = document.getElementById("ttsToggle");
 
+// ---------------------------------------------------------------------------
+// Mobile speech-synthesis unlock
+// ---------------------------------------------------------------------------
+// Mobile browsers (most strictly iOS Safari, but also some Android browsers)
+// only allow speechSynthesis.speak() to actually produce audio if it's
+// triggered synchronously within a direct user gesture (a real tap/click).
+// Our real speak() calls happen after the /chat network request resolves,
+// which is too late — by then the browser no longer considers it "from" a
+// user gesture, so it silently does nothing on mobile (desktop browsers are
+// more lenient about this, which is why it worked there).
+//
+// The fix: the first time the person actually taps/clicks anywhere on the
+// page, fire one silent, near-empty utterance synchronously inside that
+// gesture. This "unlocks" the speech engine for the rest of the page
+// session, so later programmatic speak() calls (after a fetch resolves)
+// are then allowed to produce audio.
+let speechUnlocked = false;
+function unlockSpeechSynthesisOnce() {
+  if (speechUnlocked || !("speechSynthesis" in window)) return;
+  speechUnlocked = true;
+  try {
+    const silent = new SpeechSynthesisUtterance(" ");
+    silent.volume = 0;
+    window.speechSynthesis.speak(silent);
+  } catch (e) {
+    console.warn("Could not unlock speech synthesis:", e);
+  }
+}
+document.addEventListener("touchstart", unlockSpeechSynthesisOnce, { once: true, passive: true });
+document.addEventListener("click", unlockSpeechSynthesisOnce, { once: true });
+
 const SOURCE_COLORS = {
   "Main Website": "#0C7C74",
   "Center Portal": "#D98F2B",
