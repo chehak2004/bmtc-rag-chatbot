@@ -136,37 +136,6 @@ function appendBotMessage({ answer, confidence, sources, used_llm, isError, shou
   bubble.innerHTML = escapeAndLinkify(answer);
   msg.appendChild(bubble);
 
-  const meta = document.createElement("div");
-  meta.className = "msg__meta";
-
-  if (!isError) {
-    (sources || []).forEach((label) => {
-      const stamp = document.createElement("span");
-      stamp.className = "sourceStamp";
-      const dot = document.createElement("span");
-      dot.className = "sourceStamp__dot";
-      dot.style.background = SOURCE_COLORS[label] || "#5B677A";
-      stamp.appendChild(dot);
-      stamp.appendChild(document.createTextNode(label));
-      meta.appendChild(stamp);
-    });
-
-    if (typeof confidence === "number") {
-      const badge = document.createElement("span");
-      badge.className = `confBadge ${confidenceBadgeClass(confidence)}`;
-      badge.textContent = `confidence ${(confidence * 100).toFixed(0)}%`;
-      meta.appendChild(badge);
-    }
-
-    if (used_llm === false) {
-      const badge = document.createElement("span");
-      badge.className = "confBadge med";
-      badge.textContent = "fallback mode";
-      meta.appendChild(badge);
-    }
-  }
-
-  msg.appendChild(meta);
   chatLog.appendChild(msg);
   scrollToBottom();
 
@@ -312,6 +281,26 @@ if (SpeechRecognition) {
     console.warn("Speech recognition error:", e.error);
     isListening = false;
     micBtn.classList.remove("listening");
+
+    const errorMessages = {
+      "not-allowed": "Microphone access was denied. Please allow microphone permission for this site " +
+        "in your browser settings, then try the mic button again.",
+      "service-not-allowed": "Microphone access was denied. Please allow microphone permission for this site " +
+        "in your browser settings, then try the mic button again.",
+      "no-speech": "I didn't hear anything. Please try again and speak after tapping the mic.",
+      "audio-capture": "No microphone was found on this device. Voice input isn't available here — " +
+        "you can still type your question.",
+      "network": "Voice input needs an internet connection to work. Please check your connection and try again.",
+      "aborted": null, // person cancelled deliberately — no need to show an error for this
+    };
+
+    const message = errorMessages[e.error] !== undefined
+      ? errorMessages[e.error]
+      : `Voice input couldn't start (${e.error}). You can still type your question.`;
+
+    if (message) {
+      appendBotMessage({ answer: message, isError: false, sources: [], confidence: null, shouldSpeak: false });
+    }
   };
   recognizer.onresult = (event) => {
     const transcript = event.results[0][0].transcript;
@@ -334,6 +323,16 @@ if (SpeechRecognition) {
   micBtn.disabled = true;
   micBtn.title = "Voice input not supported in this browser";
   micBtn.style.opacity = "0.4";
+  window.addEventListener("load", () => {
+    appendBotMessage({
+      answer: "Voice input isn't supported in this browser (this is common on iOS Safari). " +
+        "You can still type your question, or try Chrome/Edge for voice input.",
+      isError: false,
+      sources: [],
+      confidence: null,
+      shouldSpeak: false,
+    });
+  });
 }
 
 // ---------------------------------------------------------------------------
