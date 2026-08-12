@@ -57,11 +57,12 @@ NO_CONTEXT_MESSAGE_HI = (
     "या अधिक सहायता के लिए bookmytestcenter.com पर Contact Us पेज के माध्यम से BMTC सपोर्ट टीम से संपर्क करें।"
 )
 
-GEMINI_FAILURE_PREFIX_EN = (
-    "I'm having trouble reaching the AI service right now, but here is the most "
-    "relevant information I found in the BMTC knowledge base:\n\n"
-)
-
-GEMINI_FAILURE_PREFIX_HI = (
-    "अभी AI सेवा से जुड़ने में समस्या हो रही है, लेकिन यह जानकारी BMTC नॉलेज बेस में मिली है:\n\n"
-)
+# When the Gemini call fails and the app falls back to returning the raw
+# retrieved knowledge-base context directly, we deliberately do NOT reveal
+# to the customer that an internal AI-service failure occurred — that's an
+# implementation detail, not something a support-chat customer needs to see
+# or should be alarmed by. The fallback content is presented exactly the
+# same way a normal answer would be. (used_llm=False is still available in
+# the API response for internal/admin monitoring, just not shown in the UI.)
+GEMINI_FAILURE_PREFIX_EN = ""
+GEMINI_FAILURE_PREFIX_HI = ""
