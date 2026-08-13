@@ -262,6 +262,8 @@ document.querySelectorAll(".quickAsk__btn").forEach((btn) => {
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 let recognizer = null;
 let isListening = false;
+let recognitionGotResult = false;
+let recognitionManuallyStopped = false;
 
 if (SpeechRecognition) {
   recognizer = new SpeechRecognition();
@@ -271,11 +273,32 @@ if (SpeechRecognition) {
 
   recognizer.onstart = () => {
     isListening = true;
+    recognitionGotResult = false;
+    recognitionManuallyStopped = false;
     micBtn.classList.add("listening");
   };
   recognizer.onend = () => {
     isListening = false;
     micBtn.classList.remove("listening");
+
+    // Some browsers (notably iOS Safari) can end a recognition session
+    // silently — going straight to onend without ever firing onerror —
+    // when speech isn't detected quickly, when the OS-level speech service
+    // is unavailable, or after a very short timeout. Without this check,
+    // that looks to the person like "I tapped the mic and it just turned
+    // itself off" with no explanation. Only show a message if the person
+    // didn't stop it themselves and no result was ever produced.
+    if (!recognitionManuallyStopped && !recognitionGotResult) {
+      appendBotMessage({
+        answer: "Voice input stopped before catching anything. This can happen if speech wasn't " +
+          "detected quickly enough, or if this browser's voice recognition service isn't fully " +
+          "supported here (common on iPhone Safari). You can try again, or just type your question.",
+        isError: false,
+        sources: [],
+        confidence: null,
+        shouldSpeak: false,
+      });
+    }
   };
   recognizer.onerror = (e) => {
     console.warn("Speech recognition error:", e.error);
@@ -301,8 +324,12 @@ if (SpeechRecognition) {
     if (message) {
       appendBotMessage({ answer: message, isError: false, sources: [], confidence: null, shouldSpeak: false });
     }
+    // onerror is always followed by onend — mark as "handled" so onend's
+    // silent-failure message doesn't ALSO show and double up.
+    recognitionManuallyStopped = true;
   };
   recognizer.onresult = (event) => {
+    recognitionGotResult = true;
     const transcript = event.results[0][0].transcript;
     messageInput.value = transcript;
     messageInput.focus();
@@ -310,6 +337,7 @@ if (SpeechRecognition) {
 
   micBtn.addEventListener("click", () => {
     if (isListening) {
+      recognitionManuallyStopped = true;
       recognizer.stop();
     } else {
       try {
@@ -356,6 +384,8 @@ if (SpeechRecognition) {
 let cachedVoices = [];
 let hindiVoiceWarningShown = false;
 let currentUtterance = null;
+let ttsKeepAliveInterval = null;
+let ttsErrorShown = false;
 
 function loadVoices() {
   if ("speechSynthesis" in window) {
@@ -422,12 +452,61 @@ function speak(text) {
 
   utterance.rate = 1.0;
 
-  utterance.onstart = () => { muteBtn.hidden = false; };
-  utterance.onend = () => { muteBtn.hidden = true; currentUtterance = null; };
-  utterance.onerror = () => { muteBtn.hidden = true; currentUtterance = null; };
+  utterance.onstart = () => {
+    muteBtn.hidden = false;
+    // Known WebKit/Chrome bug: speechSynthesis silently stops speaking
+    // long text after ~15 seconds unless nudged with pause()/resume().
+    // This keep-alive re-triggers it periodically while this utterance
+    // is the one actively playing, and stops itself once it ends.
+    ttsKeepAliveInterval = setInterval(() => {
+      if (!window.speechSynthesis.speaking) {
+        clearInterval(ttsKeepAliveInterval);
+        return;
+      }
+      window.speechSynthesis.pause();
+      window.speechSynthesis.resume();
+    }, 10000);
+  };
+  utterance.onend = () => {
+    muteBtn.hidden = true;
+    currentUtterance = null;
+    if (ttsKeepAliveInterval) clearInterval(ttsKeepAliveInterval);
+  };
+  utterance.onerror = (e) => {
+    console.warn("Speech synthesis error:", e.error);
+    muteBtn.hidden = true;
+    currentUtterance = null;
+    if (ttsKeepAliveInterval) clearInterval(ttsKeepAliveInterval);
+
+    // Same principle as the mic-input fix: don't fail silently. This is
+    // especially relevant on iOS Safari, which can fail to produce audio
+    // without ever showing any indication why.
+    if (!ttsErrorShown) {
+      ttsErrorShown = true;
+      appendBotMessage({
+        answer: "Voice reply couldn't play just now (this can happen on some mobile browsers, " +
+          "especially iPhone Safari). The written answer above is still accurate — you can also " +
+          "try tapping the mute/speaker area again, or reload the page.",
+        isError: false,
+        sources: [],
+        confidence: null,
+        shouldSpeak: false,
+      });
+    }
+  };
 
   currentUtterance = utterance;
-  window.speechSynthesis.speak(utterance);
+
+  // iOS Safari sometimes leaves the synthesis engine in a paused state
+  // after being idle; resume() before speak() is a known, harmless
+  // workaround. Deferring the actual speak() call by one tick (setTimeout
+  // 0) has also been reported to help iOS Safari specifically when the
+  // call originates from inside an async callback (as ours does, after
+  // the /chat fetch resolves) rather than directly inside a user gesture.
+  window.speechSynthesis.resume();
+  setTimeout(() => {
+    window.speechSynthesis.speak(utterance);
+  }, 0);
 }
 
 // Shared stop helper — used by the mute button, the "Voice reply" toggle
@@ -436,6 +515,10 @@ function stopSpeaking() {
   if ("speechSynthesis" in window) window.speechSynthesis.cancel();
   currentUtterance = null;
   muteBtn.hidden = true;
+  if (ttsKeepAliveInterval) {
+    clearInterval(ttsKeepAliveInterval);
+    ttsKeepAliveInterval = null;
+  }
 }
 
 // Dedicated mute button: instantly stops whatever is currently being read
